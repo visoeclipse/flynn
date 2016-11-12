@@ -274,6 +274,7 @@ type ControllerClient interface {
 	CreateRelease(release *ct.Release) error
 	CreateArtifact(artifact *ct.Artifact) error
 	PutFormation(formation *ct.Formation) error
+	PutScaleRequest(req *ct.ScaleRequest) error
 	StreamFormations(since *time.Time, ch chan<- *ct.ExpandedFormation) (stream.Stream, error)
 	AppList() ([]*ct.App, error)
 	FormationListActive() ([]*ct.ExpandedFormation, error)

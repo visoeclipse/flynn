@@ -21,14 +21,17 @@ import (
 
 const RouteParentRefPrefix = "controller/apps/"
 
+var ErrScalingStopped = errors.New("controller: scaling was stopped")
+
 type ExpandedFormation struct {
-	App       *App                         `json:"app,omitempty"`
-	Release   *Release                     `json:"release,omitempty"`
-	Artifacts []*Artifact                  `json:"artifacts,omitempty"`
-	Processes map[string]int               `json:"processes,omitempty"`
-	Tags      map[string]map[string]string `json:"tags,omitempty"`
-	UpdatedAt time.Time                    `json:"updated_at,omitempty"`
-	Deleted   bool                         `json:"deleted,omitempty"`
+	App                 *App                         `json:"app,omitempty"`
+	Release             *Release                     `json:"release,omitempty"`
+	Artifacts           []*Artifact                  `json:"artifacts,omitempty"`
+	Processes           map[string]int               `json:"processes,omitempty"`
+	Tags                map[string]map[string]string `json:"tags,omitempty"`
+	UpdatedAt           time.Time                    `json:"updated_at,omitempty"`
+	Deleted             bool                         `json:"deleted,omitempty"`
+	PendingScaleRequest *ScaleRequest                `json:"pending_scale_request,omitempty"`
 
 	// DeprecatedImageArtifact is for creating backwards compatible cluster
 	// backups (the restore process used to require the ImageArtifact field
@@ -406,7 +409,7 @@ const (
 	EventTypeAppRelease           EventType = "app_release"
 	EventTypeDeployment           EventType = "deployment"
 	EventTypeJob                  EventType = "job"
-	EventTypeScale                EventType = "scale"
+	EventTypeScaleRequest         EventType = "scale_request"
 	EventTypeRelease              EventType = "release"
 	EventTypeReleaseDeletion      EventType = "release_deletion"
 	EventTypeArtifact             EventType = "artifact"
@@ -421,6 +424,11 @@ const (
 	EventTypeDomainMigration      EventType = "domain_migration"
 	EventTypeClusterBackup        EventType = "cluster_backup"
 	EventTypeAppGarbageCollection EventType = "app_garbage_collection"
+
+	// EventTypeDeprecatedScale is a deprecated event which is emitted for
+	// old clients waiting for formations to be scaled (new clients should
+	// create and wait for scale requests)
+	EventTypeDeprecatedScale EventType = "scale"
 )
 
 type Event struct {
@@ -433,11 +441,44 @@ type Event struct {
 	CreatedAt  *time.Time      `json:"created_at,omitempty"`
 }
 
-type Scale struct {
+type ScaleRequest struct {
+	ID           string                        `json:"id"`
+	AppID        string                        `json:"app"`
+	ReleaseID    string                        `json:"release"`
+	State        ScaleRequestState             `json:"state"`
+	OldProcesses map[string]int                `json:"old_processes,omitempty"`
+	NewProcesses *map[string]int               `json:"new_processes,omitempty"`
+	OldTags      map[string]map[string]string  `json:"old_tags,omitempty"`
+	NewTags      *map[string]map[string]string `json:"new_tags,omitempty"`
+	CreatedAt    *time.Time                    `json:"created_at"`
+	UpdatedAt    *time.Time                    `json:"updated_at"`
+}
+
+type ScaleRequestState string
+
+const (
+	ScaleRequestStatePending   ScaleRequestState = "pending"
+	ScaleRequestStateCancelled ScaleRequestState = "cancelled"
+	ScaleRequestStateComplete  ScaleRequestState = "complete"
+)
+
+type DeprecatedScale struct {
 	PrevProcesses map[string]int `json:"prev_processes,omitempty"`
 	Processes     map[string]int `json:"processes"`
 	ReleaseID     string         `json:"release"`
 }
+
+type ScaleOptions struct {
+	Processes            map[string]int
+	Tags                 map[string]map[string]string
+	Timeout              *time.Duration
+	Stop                 chan struct{}
+	NoWait               bool
+	ScaleRequestCallback func(*ScaleRequest)
+	JobEventCallback     func(*Job) error
+}
+
+var DefaultScaleTimeout = 30 * time.Second
 
 type AppRelease struct {
 	PrevRelease *Release `json:"prev_release,omitempty"`

@@ -31,6 +31,10 @@
         "type": "integer"
       }
     },
+    "pending_scale_request": {
+      "description": "pending scale request",
+      "type": "object"
+    },
     "updated_at": {
       "$ref": "/schema/controller/common#/definitions/updated_at"
     }
